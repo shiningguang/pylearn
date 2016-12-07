@@ -1,9 +1,13 @@
 # coding=utf-8
 # 爬取豆瓣读书用于生产物料
-
+import os
+import re
 import urllib2
+import urllib
+import uuid
 
 import MySQLdb
+import sys
 from bs4 import BeautifulSoup
 
 
@@ -15,6 +19,9 @@ conn = MySQLdb.Connect(
                     db = 'spider',
                     charset = 'utf8'
     )
+
+reload(sys)
+sys.setdefaultencoding('utf-8')
 
 
 class DBBOOK:
@@ -39,7 +46,11 @@ class DBBOOK:
     # 请求页面提取数据
     def getContent(self,page):
         soup = BeautifulSoup(page)
-        # self.url = soup.find('span',attrs={'class':'thispage'}).find_next('a').get('href')
+        self.url = soup.find('span',attrs={'class':'thispage'}).find_next('a').get('href')
+        pattern = re.compile(r'https:*?')
+        match = pattern.match(self.url)
+        if not match:
+            self.url = None
         contents = soup.find_all('table', width="100%")
 
         for i in range(0, len(contents)):
@@ -48,29 +59,36 @@ class DBBOOK:
             img = item.find('img').get('src')
 
             id = item.find('a', attrs={'class': 'nbg'}).get('href')
-            print id.strip()
+            id = id.strip().decode('utf8')
             title = item.find('div', attrs={'class': 'pl2'}).find('a').get_text()
-            print title.strip()
+            title = title.strip()
+            title = title.decode('utf8')
             auth = item.find('p', attrs={'class': 'pl'}).get_text()
-            print auth.strip()
+            auth = auth.strip()
+            auth = auth.decode('utf8')
             con = item.find('span', attrs={'class': 'inq'}).get_text()
-            print con.strip()
-
+            con = con.strip()
+            con = con.decode('utf8')
             try:
-                req = urllib2.Request(img)
-                operate = open(req)
-                data = operate.read()
+                print img
+                imgData = urllib2.urlopen(img).read()
+                id = str(uuid.uuid1())
+                fileName = self.imgpath + id +".jpg"
+                output = open(fileName, 'wb+')
+                output.write(imgData)
+                output.close()
+                print u"保存图片成功"
+
             except Exception, e:
                 print e
+                print u"保存图片出错"
 
-            file = open(self.imgpath + title + '.jpg', "wb")
-            file.write(data)
-            file.flush()
-            file.close()
 
-            imgpath = self.imgpath + title + '.jpg'
 
-            sql_insert = 'insert into doubandushu (id,title,author,content,imgurl) VALUES (' + id + ',' + title + ',' + auth + ',' + content + ',' + imgpath + '+)'
+            imgpath = str(self.imgpath)+str(id)
+
+            sql_insert = 'insert into doubandushu (id,title,author,content,imgurl) VALUES ("'\
+                         + str(id) + '","' + title + '","' + auth + '","' + con + '","' + imgpath + '")'
             cursor = conn.cursor()
             try:
                 cursor.execute(sql_insert)
@@ -110,7 +128,7 @@ class DBBOOK:
 
 
     def insertBookinfoToMysql(self,id,title,author,content,bookimg):
-        sql_insert = 'insert into doubandushu (id,title,author,content,imgurl) VALUES ('+id+','+title+','+author+','+content+','+bookimg+'+)'
+        sql_insert = 'insert into doubandushu (id,title,author,content,imgurl) VALUES ('+id+','+title+','+author+','+content+','+bookimg+')'
         cursor = conn.cursor()
         try:
             cursor.execute(sql_insert)
